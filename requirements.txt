@@ -4,3 +4,6 @@ requests
 PyGithub
 playwright
 python-dotenv
+pytest
+httpx
+openai

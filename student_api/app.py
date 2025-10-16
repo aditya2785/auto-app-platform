@@ -1,6 +1,8 @@
 import os
 import json
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from fastapi import FastAPI, Request, HTTPException
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -8,6 +10,7 @@ import logging
 
 from student_api.generator import generate_app
 from student_api.github_helper import create_and_push_to_repo
+from student_api.utils import process_attachments
 from database.db_utils import execute
 
 load_dotenv()
@@ -55,9 +58,14 @@ async def api_endpoint(request: Request):
         logger.info("Task logged to database")
 
 
+        # Process attachments
+        logger.info("Processing attachments...")
+        processed_data = process_attachments(task_request.attachments)
+        logger.info("Attachments processed")
+
         # Generate app code
         logger.info("Generating app code...")
-        app_code = generate_app(task_request.brief, task_request.attachments)
+        app_code = generate_app(task_request.brief, processed_data)
         logger.info("App code generated")
 
         # Create repo and push code
@@ -77,14 +85,34 @@ async def api_endpoint(request: Request):
             "commit_sha": commit_sha,
             "pages_url": pages_url,
         }
+        # Notify evaluation service with retry
+        retry_strategy = Retry(
+            total=4,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "POST"],
+            backoff_factor=1
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        http = requests.Session()
+        http.mount("https://", adapter)
+        http.mount("http://", adapter)
+
         try:
             logger.info("Notifying evaluation service...")
-            requests.post(task_request.evaluation_url, json=evaluation_payload)
+            response = http.post(task_request.evaluation_url, json=evaluation_payload, timeout=30)
+            response.raise_for_status()
             logger.info(f"Successfully notified evaluation service for task: {task_request.task}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to notify evaluation service for task: {task_request.task}: {e}")
 
-        return {"status": "success", "message": "Task received and is being processed."}
+        return {
+            "status": "success",
+            "api_url": str(request.url),
+            "repo_url": repo_url,
+            "pages_url": pages_url,
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"An error occurred: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
