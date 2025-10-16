@@ -1,0 +1,19 @@
+{
+  "id": "sum-of-sales",
+  "brief": "Publish a single-page site that fetches data.csv from attachments, sums its sales column, displays total in #total-sales, loads Bootstrap 5.",
+  "attachments": [
+    {"name": "data.csv", "url": "data:text/csv;base64,${seed}"}
+  ],
+  "checks": [
+    "js: document.title.includes('Sales Summary')",
+    "js: !!document.querySelector('#total-sales')"
+  ],
+  "round2": [
+    {
+      "brief": "Add #product-sales table listing each product with total sales, keep #total-sales accurate.",
+      "checks": [
+        "js: document.querySelectorAll('#product-sales tbody tr').length >= 1"
+      ]
+    }
+  ]
+}
