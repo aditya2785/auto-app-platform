@@ -4,6 +4,7 @@
 # Database files
 *.db
 *.sqlite3
+database/tasks.db
 
 # Python cache
 __pycache__/
@@ -13,3 +14,6 @@ __pycache__/
 
 # Rider files
 .idea/
+
+# Log files
+*.log
