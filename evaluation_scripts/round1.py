@@ -1,53 +1,60 @@
-import csv, json, uuid, hashlib, requests, random
-from database.db_utils import execute, fetchall
+import csv
+import json
+import uuid
+import requests
+import logging
+from database.db_utils import execute, fetchall, init_db
 
-# Load submissions.csv
-with open("submissions.csv") as f:
-    reader = csv.DictReader(f)
-    submissions = list(reader)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Load task templates
-with open("task_templates/sum-of-sales.json") as f:
-    template = json.load(f)
+def main():
+    """
+    Reads submissions from submissions.csv, generates tasks,
+    and POSTs them to the student API endpoints.
+    """
+    init_db()
 
-for sub in submissions:
-    email = sub["email"]
-    secret = sub["secret"]
-    endpoint = sub["endpoint"]
+    with open("submissions.csv", "r") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            email = row["email"]
+            endpoint = "http://localhost:8000/api-endpoint" # Assuming the student API is running locally
 
-    # Skip if already processed
-    rows = fetchall("SELECT * FROM tasks WHERE email=? AND round=1", (email,))
-    if rows:
-        continue
+            # Skip if already processed
+            if fetchall("SELECT * FROM tasks WHERE email=? AND round=1", (email,)):
+                logger.info(f"Task for {email} already exists. Skipping.")
+                continue
 
-    # Generate unique task id
-    task_hash = hashlib.md5((template["brief"] + email).encode()).hexdigest()[:5]
-    task_id = f"{template['id']}-{task_hash}"
-    nonce = str(uuid.uuid4())
+            nonce = str(uuid.uuid4())
+            payload = {
+                "email": email,
+                "secret": row["secret"],
+                "task": row["task"],
+                "round": int(row["round"]),
+                "nonce": nonce,
+                "brief": row["brief"],
+                "checks": row["checks"].split(','),
+                "evaluation_url": row["evaluation_url"],
+                "attachments": json.loads(row["attachments"]),
+            }
 
-    # Prepare payload
-    payload = {
-        "email": email,
-        "secret": secret,
-        "task": task_id,
-        "round": 1,
-        "nonce": nonce,
-        "brief": template["brief"],
-        "checks": template["checks"],
-        "attachments": template["attachments"],
-        "evaluation_url": "http://localhost:8001/evaluation-url"  # Instructor API
-    }
+            logger.info(f"Sending task {payload['task']} to {email} at {endpoint}")
 
-    # POST to student API
-    try:
-        r = requests.post(endpoint, json=payload, timeout=600)
-        status = r.status_code
-    except Exception as e:
-        status = 0
+            try:
+                r = requests.post(endpoint, json=payload, timeout=30)
+                status = r.status_code
+                if status != 200:
+                    logger.error(f"Failed to send task to {email}: {r.text}")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to send task to {email}: {e}")
+                status = 0
 
-    # Log in tasks table
-    execute("""
-        INSERT INTO tasks(email, task, round, nonce, brief, attachments, checks, evaluation_url, endpoint, statuscode, secret)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (email, task_id, 1, nonce, template["brief"], json.dumps(template["attachments"]),
-          json.dumps(template["checks"]), payload["evaluation_url"], endpoint, status, secret))
+            execute(
+                "INSERT INTO tasks (email, task, round, nonce, brief, attachments, checks, evaluation_url, endpoint, statuscode, secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (payload["email"], payload["task"], payload["round"], payload["nonce"], payload["brief"], json.dumps(payload["attachments"]), json.dumps(payload["checks"]), payload["evaluation_url"], endpoint, status, payload["secret"])
+            )
+            logger.info(f"Task for {email} logged to database with status {status}.")
+
+if __name__ == "__main__":
+    main()
