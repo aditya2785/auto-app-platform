@@ -1,0 +1,12 @@
+2025-10-16 09:46:50,671 - student_api.app - INFO - Received task: test-task for email: test@example.com
+2025-10-16 09:46:50,674 - student_api.app - INFO - Task logged to database
+2025-10-16 09:46:50,674 - student_api.app - INFO - Generating app code...
+2025-10-16 09:46:50,674 - student_api.app - INFO - App code generated
+2025-10-16 09:46:50,674 - student_api.app - INFO - Creating and pushing to repo...
+2025-10-16 09:46:50,674 - student_api.github_helper - WARNING - No GITHUB_TOKEN found, mocking GitHub API calls.
+2025-10-16 09:46:50,675 - student_api.app - INFO - Repo created and code pushed
+2025-10-16 09:46:50,675 - student_api.app - INFO - Notifying evaluation service...
+2025-10-16 09:46:50,680 - student_api.app - ERROR - Failed to notify evaluation service for task: test-task: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /evaluation (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fa297f89a60>: Failed to establish a new connection: [Errno 111] Connection refused'))
+INFO:     127.0.0.1:56932 - "POST /api-endpoint HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47074 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47074 - "GET /openapi.json HTTP/1.1" 200 OK
