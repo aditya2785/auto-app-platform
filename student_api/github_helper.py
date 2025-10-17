@@ -45,9 +45,17 @@ def create_and_push_to_repo(email: str, task_name: str, files: dict[str, str], r
         user = g.get_user()
         repo = user.get_repo(repo_name)
         logger.info(f"Repo {repo_name} already exists. Updating files.")
-    except GithubException:
-        logger.info(f"Creating repo {repo_name}.")
-        repo = user.create_repo(repo_name, private=False)
+    except GithubException as e:
+        if e.status == 404:
+            logger.info(f"Creating repo {repo_name}.")
+            try:
+                repo = user.create_repo(repo_name, private=False)
+            except GithubException as create_e:
+                logger.error(f"Failed to create repo {repo_name}: {create_e}")
+                raise create_e
+        else:
+            logger.error(f"Failed to get repo {repo_name}: {e}")
+            raise e
 
     commit_message = f"Round {round_num} submission"
     logger.info(f"Using commit message: {commit_message}")
