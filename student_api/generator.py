@@ -1,42 +1,27 @@
 import os
 import re
-import json
-import openai
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-MODEL = "gpt-4o"
+# Configure Gemini API
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+TEXT_MODEL = "models/text-bison-001"        # Free text model
+VISION_MODEL = "models/vision-bison-001"    # Free vision model
 
 def solve_captcha(image_data_uri: str) -> str:
     """
-    Solves the captcha from a data URI using a vision model.
+    Solves the captcha from a data URI using Gemini's free vision model.
     """
     try:
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What are the characters in this image?"},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": image_data_uri,
-                            },
-                        },
-                    ],
-                }
-            ],
-            max_tokens=300,
-        )
-        solution = response.choices[0].message.content
-        return solution.strip() if solution else "Could not solve captcha"
+        model = genai.GenerativeModel(VISION_MODEL)
+        prompt = "Read the text from this captcha image."
+        response = model.generate_content([prompt, image_data_uri])
+        return response.text.strip() if response and response.text else "Could not solve captcha"
     except Exception as e:
-        print(f"Error solving captcha: {e}")
+        print(f"Error solving captcha with Gemini: {e}")
         return "Error solving captcha"
 
 def create_prompt(brief: str, processed_data: dict, captcha_solution: str) -> str:
@@ -56,13 +41,13 @@ You are an expert web developer. Your task is to build a single-page web applica
 {brief}
 
 **Application Requirements:**
-1.  The page must display a captcha image.
-2.  The image URL is provided via a `?url=` query parameter.
-3.  If the `?url=` parameter is not present, the page should default to displaying the sample captcha image provided below.
-4.  Below the image, the page must display the solved text of the captcha.
-5.  The solved text for the sample captcha is: **{captcha_solution}**
-6.  The application must be a single `index.html` file with embedded CSS and JavaScript. No external files.
-7.  The solved captcha text must be displayed within 15 seconds of the page loading. The provided solution should be used.
+1. The page must display a captcha image.
+2. The image URL is provided via a `?url=` query parameter.
+3. If the `?url=` parameter is not present, the page should default to displaying the sample captcha image provided below.
+4. Below the image, the page must display the solved text of the captcha.
+5. The solved text for the sample captcha is: **{captcha_solution}**
+6. The application must be a single `index.html` file with embedded CSS and JavaScript. No external files.
+7. The solved captcha text must be displayed within 15 seconds of the page loading. The provided solution should be used.
 
 **Sample Captcha Image Data URI:**
 `{sample_image_uri}`
@@ -77,77 +62,56 @@ You are an expert web developer. Your task is to build a single-page web applica
 - Generate an MIT LICENSE file.
 
 **Output Format:**
-Please generate the files in the following format, with each file enclosed in a code block with the specified language.
-
 ```html
 <!-- index.html -->
 ...
-```
-
-```markdown
 <!-- README.md -->
 ...
-```
-
-```text
 <!-- LICENSE -->
 ...
-```
 """
-    return prompt
+return prompt
 
 def parse_generated_code(generated_code: str) -> dict[str, str]:
-    """
-    Parses the generated code and splits it into files.
-    """
-    files = {}
-    file_patterns = {
-        "index.html": r"```html\n<!-- index.html -->\n(.*?)\n```",
-        "README.md": r"```markdown\n<!-- README.md -->\n(.*?)\n```",
-        "LICENSE": r"```text\n<!-- LICENSE -->\n(.*?)\n```",
-    }
+"""
+Parses the generated code and splits it into files.
+"""
+files = {}
+file_patterns = {
+"index.html": r"html\n<!-- index.html -->\n(.*?)\n",
+"README.md": r"markdown\n<!-- README.md -->\n(.*?)\n",
+"LICENSE": r"text\n<!-- LICENSE -->\n(.*?)\n",
+}
+for file_name, pattern in file_patterns.items():
+    match = re.search(pattern, generated_code, re.DOTALL)
+    if match:
+        files[file_name] = match.group(1).strip()
 
-    for file_name, pattern in file_patterns.items():
-        match = re.search(pattern, generated_code, re.DOTALL)
-        if match:
-            files[file_name] = match.group(1).strip()
-
-    return files
-
+return files
 def generate_app(brief: str, processed_data: dict) -> dict[str, str]:
-    """
-    Generates a simple HTML/JS application based on the brief and processed data.
-    """
-    sample_image_uri = ""
-    for name, data in processed_data.items():
-        if name.endswith((".png", ".jpg", ".jpeg")):
-            sample_image_uri = data
-            break
+"""
+Generates a simple HTML/JS application based on the brief and processed data using Gemini.
+"""
+sample_image_uri = ""
+for name, data in processed_data.items():
+if name.endswith((".png", ".jpg", ".jpeg")):
+sample_image_uri = data
+break
+captcha_solution = solve_captcha(sample_image_uri) if sample_image_uri else "No sample image provided."
+prompt = create_prompt(brief, processed_data, captcha_solution)
 
-    if not sample_image_uri:
-        captcha_solution = "No sample image provided."
-    else:
-        captcha_solution = solve_captcha(sample_image_uri)
-
-    prompt = create_prompt(brief, processed_data, captcha_solution)
-
-    try:
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert web developer."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.2,
-            max_tokens=4096,
-        )
-        generated_code = response.choices[0].message.content
-        files = parse_generated_code(generated_code)
-        return files
-    except openai.RateLimitError as e:
-        print(f"Error generating code: {e}")
-        return {"error": "OpenAI API quota exceeded. Please check your plan and billing details."}
-    except Exception as e:
-        print(f"Error generating code: {e}")
-        return {}
+try:
+    response = genai.chat(
+        model=TEXT_MODEL,
+        messages=[
+            {"role": "system", "content": "You are an expert web developer."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.2,
+    )
+    generated_code = response["candidates"][0]["content"]
+    files = parse_generated_code(generated_code)
+    return files
+except Exception as e:
+    print(f"Error generating code with Gemini: {e}")
+    return {"error": "Gemini API error"}
