@@ -2,10 +2,12 @@ import base64
 import os
 import json
 import csv
+import logging
 
 def process_attachments(attachments: list[dict]) -> dict:
     """
-    Decodes and processes the attachments.
+    Processes the attachments by decoding them and saving them to a temporary directory.
+    For image files, it returns the data URI directly.
     """
     processed_data = {}
     temp_dir = "temp"
@@ -15,29 +17,47 @@ def process_attachments(attachments: list[dict]) -> dict:
         name = attachment["name"]
         url = attachment["url"]
 
-        # Decode the base64-encoded data
-        try:
-            header, encoded = url.split(",", 1)
-            data = base64.b64decode(encoded)
-        except Exception as e:
-            print(f"Error decoding attachment {name}: {e}")
+        if name.endswith((".png", ".jpg", ".jpeg")):
+            processed_data[name] = url
             continue
 
-        # Save the attachment to a temporary file
-        file_path = os.path.join(temp_dir, name)
-        with open(file_path, "wb") as f:
-            f.write(data)
+        try:
+            header, encoded = url.split(",", 1)
+            # Add padding if it's missing
+            padding = len(encoded) % 4
+            if padding != 0:
+                encoded += "=" * (4 - padding)
+            data = base64.b64decode(encoded)
+        except (ValueError, TypeError) as e:
+            logging.error(f"Error decoding attachment {name}: {e}")
+            continue
 
-        # Process the attachment based on its file type
+        file_path = os.path.join(temp_dir, name)
+        try:
+            with open(file_path, "wb") as f:
+                f.write(data)
+        except IOError as e:
+            logging.error(f"Error writing attachment {name} to file: {e}")
+            continue
+
         if name.endswith(".csv"):
-            with open(file_path, "r") as f:
-                reader = csv.DictReader(f)
-                processed_data[name] = [row for row in reader]
+            try:
+                with open(file_path, "r", encoding='utf-8-sig') as f:
+                    reader = csv.DictReader(f)
+                    processed_data[name] = [row for row in reader]
+            except (IOError, csv.Error) as e:
+                logging.error(f"Error processing CSV {name}: {e}")
         elif name.endswith(".json"):
-            with open(file_path, "r") as f:
-                processed_data[name] = json.load(f)
+            try:
+                with open(file_path, "r") as f:
+                    processed_data[name] = json.load(f)
+            except (IOError, json.JSONDecodeError) as e:
+                logging.error(f"Error processing JSON {name}: {e}")
         elif name.endswith(".md"):
-            with open(file_path, "r") as f:
-                processed_data[name] = f.read()
+            try:
+                with open(file_path, "r") as f:
+                    processed_data[name] = f.read()
+            except IOError as e:
+                logging.error(f"Error reading Markdown file {name}: {e}")
 
     return processed_data
