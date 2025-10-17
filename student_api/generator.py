@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-MODEL = "gpt-4o"
+MODEL = "gpt-3.5-turbo"
 
 def solve_captcha(image_data_uri: str) -> str:
     """

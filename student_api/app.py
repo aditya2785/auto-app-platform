@@ -62,7 +62,7 @@ def read_root():
     """A welcome message for the API."""
     return {"message": "Welcome to the Student API"}
 
-@app.post("/")
+@app.post("/api-endpoint")
 async def api_endpoint(request: Request):
     """The main endpoint for processing tasks."""
     try:
