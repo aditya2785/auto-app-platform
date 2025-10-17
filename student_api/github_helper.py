@@ -1,6 +1,6 @@
 import os
 import time
-from github import Github, GithubException
+from github import Github, Auth, GithubException
 from dotenv import load_dotenv
 import logging
 
@@ -11,7 +11,8 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if GITHUB_TOKEN == "your_github_token":
     g = None
 else:
-    g = Github(GITHUB_TOKEN)
+    auth = Auth.Token(GITHUB_TOKEN)
+    g = Github(auth=auth)
 
 logger = logging.getLogger(__name__)
 

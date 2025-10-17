@@ -78,14 +78,15 @@ def generate_app(brief: str, processed_data: dict) -> dict[str, str]:
     prompt = create_prompt(brief, processed_data)
 
     try:
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.7,
-            max_tokens=2048,
+            max_tokens=4096,
         )
         generated_code = response.choices[0].message.content
         files = parse_generated_code(generated_code)
